@@ -268,6 +268,8 @@ try {
 - Default timezone must be set to `Asia/Kolkata`
 - Use PDO with prepared statements
 
+> ⚠️ **Security Note:** Never hardcode database credentials directly in source code for production. Use environment variables or a `.env` file (excluded from Git via `.gitignore`) to store sensitive credentials. See [Section 17.4](#174-secure-credential-storage) for details.
+
 ### 6.2 Footer Standards (`footer.php`)
 
 ```php
@@ -902,6 +904,30 @@ This code expires in 10 minutes.
 - ✅ Use PDO prepared statements for all database operations
 - ✅ Validate file uploads (type, size, security)
 - ✅ Sanitize all user inputs
+- ✅ Use `htmlspecialchars()` for output encoding to prevent XSS
+
+**SQL Injection Prevention (Prepared Statements):**
+
+```php
+// ❌ VULNERABLE — Never concatenate user input into queries
+$query = "SELECT * FROM users WHERE email = '".$_POST['email']."' AND password='".$_POST['password']."'";
+// A hacker can input: ' OR '1'='1  → bypasses authentication
+
+// ✅ SECURE — Always use prepared statements
+$stmt = $con->prepare("SELECT * FROM users WHERE email = ? AND password = ?");
+$stmt->execute([$email, $password]);
+```
+
+**XSS Prevention (Output Encoding):**
+
+```php
+// ❌ VULNERABLE — Never echo raw user input
+echo $_GET['name'];
+// A hacker can inject: <script>alert('hacked')</script>
+
+// ✅ SECURE — Always encode output with htmlspecialchars()
+echo htmlspecialchars($input, ENT_QUOTES, 'UTF-8');
+```
 
 ### 17.3 .htaccess Security
 
@@ -920,6 +946,213 @@ Header set X-Content-Type-Options "nosniff"
 Header set X-Frame-Options "SAMEORIGIN"
 Header set X-XSS-Protection "1; mode=block"
 ```
+
+### 17.4 Secure Credential Storage
+
+> ⚠️ **Never commit database passwords, API keys, or any sensitive credentials to Git.**
+
+**Use a `.env` file** to store all sensitive configuration values:
+
+```
+# .env (must be in .gitignore — NEVER commit this file)
+DB_HOST=localhost
+DB_NAME=your_database
+DB_USERNAME=your_username
+DB_PASSWORD=your_password
+API_KEY=your_api_key
+```
+
+**Load credentials from `.env` in `dbConfig.php`:**
+
+```php
+<?php
+// Read .env file
+$envFile = __DIR__ . '/../.env';
+if (file_exists($envFile)) {
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        if (strpos(trim($line), '#') === 0) continue;
+        list($key, $value) = explode('=', $line, 2);
+        $_ENV[trim($key)] = trim($value);
+    }
+}
+
+date_default_timezone_set('Asia/Kolkata');
+
+$host = $_ENV['DB_HOST'] ?? 'localhost';
+$dbname = $_ENV['DB_NAME'] ?? '';
+$username = $_ENV['DB_USERNAME'] ?? '';
+$password = $_ENV['DB_PASSWORD'] ?? '';
+
+try {
+    $con = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password);
+    $con->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $con->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+} catch(PDOException $e) {
+    die("Connection failed: " . $e->getMessage());
+}
+?>
+```
+
+**Ensure `.gitignore` includes:**
+```
+.env
+include/dbConfig.php
+```
+
+### 17.5 Brute Force Protection
+
+Implement measures to prevent automated login attempts:
+
+- ✅ **Login attempt limiting** — Lock accounts or add delay after 5 failed attempts
+- ✅ **CAPTCHA** — Add CAPTCHA (e.g., Google reCAPTCHA) on login forms after repeated failures
+- ✅ **Account lockout** — Temporarily lock accounts after multiple failed attempts
+- ✅ **Login logging** — Log all login attempts in the `loginLogs` table (IP, timestamp, status)
+
+**Example: Login Attempt Limiting**
+
+```php
+<?php
+// Check failed login attempts in the last 30 minutes
+$stmt = $con->prepare("SELECT COUNT(*) as attempts FROM loginLogs 
+    WHERE email = ? AND status = 'failed' AND loginTime > DATE_SUB(NOW(), INTERVAL 30 MINUTE)");
+$stmt->execute([$email]);
+$result = $stmt->fetch();
+
+if ($result['attempts'] >= 5) {
+    die("Too many failed login attempts. Please try again after 30 minutes.");
+}
+?>
+```
+
+### 17.6 Web Application Firewall (WAF)
+
+A **Web Application Firewall (WAF)** adds an extra layer of protection by filtering malicious traffic before it reaches the server.
+
+**Recommended WAF Solutions:**
+
+| WAF Provider | Type | Cost | Best For |
+|-------------|------|------|----------|
+| **Cloudflare** | Cloud-based | Free tier available | All projects |
+| **Sucuri** | Cloud-based | Paid | WordPress/PHP sites |
+| **ModSecurity** | Server-based | Free (open-source) | Self-managed servers |
+
+**Setup Steps (Cloudflare — Recommended):**
+
+1. Create a Cloudflare account at [cloudflare.com](https://cloudflare.com)
+2. Add your domain and update nameservers
+3. Enable **"Under Attack Mode"** during active threats
+4. Configure firewall rules:
+   - Block requests from known malicious IPs
+   - Rate limit login endpoints
+   - Challenge suspicious traffic with CAPTCHA
+5. Enable **Bot Protection** and **DDoS Protection**
+
+> 💡 **Tip:** Even the free Cloudflare plan provides basic WAF, DDoS protection, and SSL — it should be enabled on **every production project**.
+
+> ⚠️ **Important:** If the hosting server does not provide a built-in WAF or firewall feature, the development team must set it up independently using a third-party service like Cloudflare (as described above). This is a **mandatory security requirement** and must not be skipped.
+
+### 17.7 Server Log Monitoring
+
+Regularly monitor server logs to detect suspicious activity:
+
+- ✅ **Check Apache/Nginx access logs** for unusual request patterns
+- ✅ **Monitor error logs** for repeated failed operations
+- ✅ **Review `loginLogs` table** for failed authentication spikes
+- ✅ **Set up alert notifications** for critical events
+
+**Key Log Locations:**
+
+| Hosting | Access Log | Error Log |
+|---------|------------|-----------|
+| **Hostinger** | hPanel → Files → Logs | hPanel → Files → Logs |
+| **MilesWeb/cPanel** | cPanel → Metrics → Raw Access | cPanel → Metrics → Errors |
+| **XAMPP (Local)** | `C:\xampp\apache\logs\access.log` | `C:\xampp\apache\logs\error.log` |
+
+**What to Look For:**
+
+- Multiple failed login attempts from the same IP
+- Unusual access to admin or sensitive endpoints
+- SQL injection patterns in URL parameters (e.g., `' OR 1=1`, `UNION SELECT`)
+- Requests to non-existent files (directory traversal attempts)
+- Abnormally large number of requests in short time (DDoS)
+
+### 17.8 Backup & Recovery
+
+Maintain regular backups and a tested recovery process:
+
+> ⚠️ **Important:** If the hosting server does not provide automatic backup features, the development team must handle backups manually on their side. This includes scheduling regular database exports and downloading full site backups to a secure local or cloud storage. **Backups are a mandatory responsibility — they must not be ignored regardless of hosting limitations.**
+
+**Backup Schedule:**
+
+| Backup Type | Frequency | Includes |
+|-------------|-----------|----------|
+| **Full Site Backup** | Weekly | All files + database |
+| **Database Backup** | Daily | Database export (`.sql`) |
+| **Pre-Release Backup** | Before every deployment | Full site + database |
+
+**Backup Methods:**
+
+| Hosting | Method |
+|---------|--------|
+| **Hostinger** | hPanel → Files → Backups → Generate/Download |
+| **MilesWeb/cPanel** | cPanel → Files → Backup Wizard → Full/Partial Backup |
+| **Manual (Database)** | Use DBeaver or phpMyAdmin to export `.sql` file |
+
+**Recovery Checklist (Restoring from Clean Backup):**
+
+1. Download the last known clean backup
+2. Take the compromised site offline (maintenance mode)
+3. Restore files from backup
+4. Restore database from backup
+5. Reset all user and admin passwords
+6. Update `dbConfig.php` with new credentials
+7. Clear all active sessions
+8. Verify restored site functionality
+9. Re-enable the site and monitor closely
+
+### 17.9 Incident Response Plan
+
+If the website is compromised or a security breach is suspected, follow this step-by-step process:
+
+**🚨 Immediate Actions (Within 1 Hour):**
+
+1. **Take the site offline** — Enable maintenance mode or temporarily restrict access
+2. **Reset all passwords** — Admin, database, cPanel/hPanel, FTP, and API keys
+3. **Notify the Project Owner and Team Lead** immediately
+
+**🔍 Investigation (Within 24 Hours):**
+
+4. **Download all website files** — Take a snapshot of the current state for analysis
+5. **Search for suspicious or unknown code** — Look for:
+   - Unknown PHP files (especially in `/uploads/`, root directory)
+   - Obfuscated code (`base64_decode`, `eval()`, `exec()`, `shell_exec()`)
+   - Hidden backdoor files (e.g., `shell.php`, `c99.php`, random-named `.php` files)
+6. **Check recently modified files** — Run the following on the server:
+   ```bash
+   # Find files modified in the last 7 days
+   find /public_html -type f -mtime -7 -ls
+   ```
+7. **Scan server logs for unusual activity** — Check access logs and error logs for:
+   - Unfamiliar IP addresses accessing admin pages
+   - POST requests to unexpected files
+   - SQL injection or XSS patterns in URLs
+8. **Run malware scan** — Use hosting provider's built-in scanner or tools like:
+   - Hostinger: hPanel → Security → Malware Scanner
+   - cPanel: ImunifyAV / ClamAV Scanner
+
+**🔧 Recovery:**
+
+9. **Restore from a clean backup** — Use the most recent backup taken before the breach
+10. **Patch the vulnerability** — Identify and fix the security gap that was exploited
+11. **Re-deploy the clean codebase** — Push from a clean Git repository
+
+**✅ Post-Recovery:**
+
+12. **Verify all functionality** — Test the restored site thoroughly
+13. **Enable WAF** — Set up Cloudflare or another WAF if not already active
+14. **Document the incident** — Record what happened, how it was fixed, and lessons learned
+15. **Monitor closely** — Watch logs and access patterns for at least 2 weeks after recovery
 
 ---
 
