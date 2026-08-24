@@ -1,7 +1,7 @@
 # SETTribe — Project Development Guideline
 
-> **Version:** 1.0  
-> **Last Updated:** February 2026  
+> **Version:** 1.1.0  
+> **Last Updated:** August 2026  
 > **Maintained by:** SETTribe Development Team
 
 This comprehensive document defines the end-to-end project development standards, workflows, and best practices to be followed across all SETTribe projects. It serves as the **single source of truth** for maintaining consistency, security, and scalability.
@@ -29,6 +29,7 @@ This comprehensive document defines the end-to-end project development standards
 17. [Security & Best Practices](#17-security--best-practices)
 18. [Onboarding Guide for New Developers](#18-onboarding-guide-for-new-developers)
 19. [Role-Based Checklists](#19-role-based-checklists)
+20. [Cloudflare R2 Implementation Guide](#20-cloudflare-r2-implementation-guide)
 
 ---
 
@@ -312,6 +313,8 @@ All systems must implement:
 ---
 
 ## 8. File Upload Module
+
+> 🚀 **Storage Standard:** For all new projects, Cloudflare R2 is the standard object storage solution. See [Section 20: Cloudflare R2 Implementation Guide](#20-cloudflare-r2-implementation-guide) for integration details.
 
 ### 8.1 Storage Path Structure
 
@@ -1257,6 +1260,20 @@ If the website is compromised or a security breach is suspected, follow this ste
 - [ ] Update documentation if needed
 - [ ] Review security and access permissions
 - [ ] Backup verification
+
+---
+
+## 20. Cloudflare R2 Implementation Guide
+
+The **Cloudflare R2 Object Storage** implementation is a core standard for all SETTribe projects requiring scalable file storage. It provides an S3-compatible, zero-egress-fee storage solution.
+
+**Key Requirements:**
+- **AWS SDK for PHP:** Use `aws/aws-sdk-php:~3.297.0` via Composer.
+- **Environment Variables:** Credentials MUST be stored securely in a `.env` file (`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`).
+- **Core Configuration:** Implement `include/r2_config.php` as the single source of truth for R2 operations, and `include/loadenv.php` for loading environment variables.
+- **Security:** Never commit `.env` or hardcode credentials. Validate files before upload, sanitize filenames, and store only the **object key** in the database.
+
+> 📖 **Full Documentation:** For complete setup steps, code templates, helper functions, and troubleshooting, refer to the standalone [Cloudflare R2 Implementation Guide](cloudflare_r2_implementation_guide.md).
 
 ---
 
