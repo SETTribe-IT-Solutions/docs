@@ -1267,6 +1267,8 @@ If the website is compromised or a security breach is suspected, follow this ste
 
 The **Cloudflare R2 Object Storage** implementation is a core standard for all SETTribe projects requiring scalable file storage. It provides an S3-compatible, zero-egress-fee storage solution.
 
+### 20.1 PHP Projects
+
 **Key Requirements:**
 - **AWS SDK for PHP:** Use `aws/aws-sdk-php:~3.297.0` via Composer.
 - **Environment Variables:** Credentials MUST be stored securely in a `.env` file (`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`).
@@ -1274,6 +1276,16 @@ The **Cloudflare R2 Object Storage** implementation is a core standard for all S
 - **Security:** Never commit `.env` or hardcode credentials. Validate files before upload, sanitize filenames, and store only the **object key** in the database.
 
 > 📖 **Full Documentation:** For complete setup steps, code templates, helper functions, and troubleshooting, refer to the standalone [Cloudflare R2 Implementation Guide](cloudflare_r2_implementation_guide.md).
+
+### 20.2 Java Spring Boot Projects
+
+**Key Requirements:**
+- **AWS SDK for Java (v2):** Manage dependencies using the AWS SDK BOM (`software.amazon.awssdk:bom`).
+- **Application Properties:** Configure `cloudflare.account-id`, `cloudflare.access-key`, `cloudflare.secret-key`, `cloudflare.bucket-name`, and `cloudflare.public-url` in `application.properties`.
+- **Core Configuration:** Create an `R2Config.java` to construct the `S3Client` Spring Bean, configuring the endpoint to your Cloudflare account.
+- **Security:** Never commit real credentials to version control. Add `application.properties` to `.gitignore` and use `application.properties.example` for the template. Manage upload limits via `spring.servlet.multipart.max-file-size`.
+
+> 📖 **Full Documentation:** For a complete implementation example including controllers and services, refer to the [Cloudflare R2 Java Spring Boot Repository](https://github.com/SETTribe-IT-Solutions/cloudflare-r2-bucket-java-spring-boot).
 
 ---
 
